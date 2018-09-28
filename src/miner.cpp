@@ -1626,10 +1626,11 @@ static void ArrayShiftRight(uint8_t array[], int len, int nShift) {
     } while(i);
 }
 
-static void  GenCoeffMatrix(uint256 hash, unsigned int nBits, std::vector<uint8_t> &coeffM) {
+static void  NewGenCoeffMatrix(uint256 hash, unsigned int nBits, std::vector<uint8_t> &coeffM) {
     unsigned int mEquations = nBits;
     unsigned int nUnknowns = nBits+8;
     unsigned int nTerms = 1 + (nUnknowns+1)*(nUnknowns)/2;
+	//printf("\n **********************NewGenCoeffMatrix ***********************\n");
 
     //generate the first polynomial coefficients.
     unsigned char in[32], out[32];
@@ -1638,16 +1639,50 @@ static void  GenCoeffMatrix(uint256 hash, unsigned int nBits, std::vector<uint8_
     std::bitset<256> bits;
     pqcSha256(hash.begin(),32,in);
 
+	for (i = 0; i < mEquations ; i++) {
+	    count = 0;
+		do {
+            pqcSha256(in,32,out);
+            Uint256ToBits(out, bits);
+            for (k = 0; k < 256; k++) {
+                if(count < nTerms) {
+                    g[count++] = (uint8_t)bits[k];
+                 } else {
+                     break;
+                 }
+             }
+            for (j = 0; j < 32; j++) {
+                in[j] = out[j];
+            }
+        } while(count < nTerms);
+        for (j = 0; j < nTerms; j++) {
+            coeffM[i*nTerms+j] = g[j];
+        }
+    }
+}
+
+static void  GenCoeffMatrix(uint256 hash, unsigned int nBits, std::vector<uint8_t> &coeffM) {
+    unsigned int mEquations = nBits;
+    unsigned int nUnknowns = nBits+8;
+    unsigned int nTerms = 1 + (nUnknowns+1)*(nUnknowns)/2;
+	//printf("\n $$$$$$$$$$$$$$$$$$$$$$   OLD  GenCoeffMatrix $$$$$$$$$$$$$$$$$$$$\n");
+
+    //generate the first polynomial coefficients.
+    unsigned char in[32], out[32];
+    unsigned int count = 0, i, j ,k;
+    uint8_t g[nTerms];
+    std::bitset<256> bits;
+    pqcSha256(hash.begin(),32,in);
     do {
          pqcSha256(in,32,out);
          Uint256ToBits(out, bits);
          for (k = 0; k < 256; k++) {
              if(count < nTerms) {
                  g[count++] = (uint8_t)bits[k];
-             } else {
-                 break;
-             }
-         }
+              } else {
+                  break;
+              }
+          }
          for (j = 0; j < 32; j++) {
              in[j] = out[j];
          }
@@ -1658,7 +1693,7 @@ static void  GenCoeffMatrix(uint256 hash, unsigned int nBits, std::vector<uint8_
         ArrayShiftRight(g, nTerms, 1);
         for (j = 0; j < nTerms; j++)
             coeffM[i*nTerms+j] = g[j];
-    }
+    }	
 
 }
 
@@ -1777,7 +1812,11 @@ uint256 SerchSolution(uint256 hash, unsigned int nBits, uint256 randomNonce, CBl
     unsigned int nTerms = 1 + (nUnknowns+1)*(nUnknowns)/2;
     std::vector<uint8_t> coeffMatrix;
     coeffMatrix.resize(mEquations*nTerms);
-    GenCoeffMatrix(hash, nBits, coeffMatrix);
+	if (pindexPrev->nHeight < 26299) {
+        GenCoeffMatrix(hash, nBits, coeffMatrix);
+	} else {
+        NewGenCoeffMatrix(hash, nBits, coeffMatrix);
+	}
     int ***Eqs = CreateEquations(nUnknowns, mEquations);
     uint64_t maxsol = 1; // The solver only returns maxsol solutions. Other solutions will be discarded.
     uint64_t **SolArray = CreateArray(maxsol); // Set all array elements to zero.
@@ -1802,13 +1841,31 @@ uint256 SerchSolution(uint256 hash, unsigned int nBits, uint256 randomNonce, CBl
 
 }
 
-bool CheckSolution(uint256 hash, unsigned int nBits, uint256 nNonce) {
+bool CheckSolution(uint256 hash, unsigned int nBits, uint256 preblockhash, uint256 nNonce) {
     unsigned int mEquations = nBits;
     unsigned int nUnknowns = nBits+8;
     unsigned int nTerms = 1 + (nUnknowns+1)*(nUnknowns)/2;
     std::vector<uint8_t> coeffMatrix;
     coeffMatrix.resize(mEquations*nTerms);
-    GenCoeffMatrix(hash, nBits, coeffMatrix);
+
+    // Get prev block index
+    CBlockIndex* pindexPrev = NULL;
+    int height = 0;
+	uint256 initHash = 0;
+    if (preblockhash != initHash) {
+        std::map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.find(preblockhash);
+        if (mi == mapBlockIndex.end())
+            return false;
+        pindexPrev = (*mi).second;
+        height = pindexPrev->nHeight+1;
+    } else {
+        height = 0;
+	}
+    if (height < 26300) {
+	    GenCoeffMatrix(hash, nBits, coeffMatrix);
+    } else {
+        NewGenCoeffMatrix(hash, nBits, coeffMatrix);
+	}
     unsigned int i, j, k, count;
     uint8_t x[nUnknowns], tempbit;
     Uint256ToSolutionBits(x, nUnknowns, nNonce);
@@ -1837,7 +1894,7 @@ bool CheckSolution(uint256 hash, unsigned int nBits, uint256 nNonce) {
 }
 
 
-bool CheckProofOfWork(uint256 hash, unsigned int nBits, uint256 nNonce)
+bool CheckProofOfWork(uint256 hash, unsigned int nBits, uint256 preblockhash, uint256 nNonce)
 {
     unsigned int bnTarget = nBits;
 
@@ -1846,7 +1903,7 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, uint256 nNonce)
         return error("CheckProofOfWork() : nBits below minimum work");
 
     // Check proof of work matches claimed amount
-    if (!CheckSolution(hash, nBits, nNonce))
+    if (!CheckSolution(hash, nBits, preblockhash,nNonce))
         return error("CheckProofOfWork() : hash doesn't match nBits");
 
     return true;
@@ -2329,6 +2386,13 @@ void static AbcmintMiner(CWallet *pwallet)
         int64 nStart = GetTime();
         uint256 tempHash = pblock->hashPrevBlock ^ pblock->hashMerkleRoot;
         uint256 seedHash = Hash(BEGIN(tempHash), END(tempHash));
+		uint256 prevblockhash = 0;
+		if (pindexBest->GetBlockHash() == hashGenesisBlock || pindexPrev->pprev->GetBlockHash() == hashGenesisBlock) {
+		    prevblockhash = 0;
+		} else {
+            prevblockhash = pindexPrev->GetBlockHash();
+		}
+
         while(true)
         {
             uint256 nNonceFound;
@@ -2339,7 +2403,7 @@ void static AbcmintMiner(CWallet *pwallet)
             // Check if something found
             if (nNonceFound !=  -1)
             {
-                if (CheckSolution(seedHash, pblock->nBits, nNonceFound))
+                if (CheckSolution(seedHash, pblock->nBits, prevblockhash, nNonceFound))
                 {
                     // Found a solution
                     pblock->nNonce = nNonceFound;
