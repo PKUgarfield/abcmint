@@ -1307,7 +1307,8 @@ static const int64 nInterval = nTargetTimespan / nTargetSpacing;
 static const int64 nNewInterval = nNewTargetTimespan / nTargetSpacing;
 
 static unsigned int bnPowUpLimit = 256;
-static unsigned int bnPowLowLimit = 41;
+//[singleRun]
+static unsigned int bnPowLowLimit = 36;
 
 const int64 blockValue[45] = {250000000,5,10,20,40,40,40,40,40,40,40,160,160,160,160,160,160,640,640,1280,1280,2563,2560,1884,1386,1020,751,552,406,299,220,162,119,87,64,47,35,25,18,13,10,7,5,4,184230000000};
 
@@ -1503,7 +1504,8 @@ unsigned int ComputeMinWork(unsigned int nBase, int64 nTime)
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock)
 {
     unsigned int nProofOfWorkLimit = bnPowLowLimit;
-
+    //[singleRun]
+    return bnPowLowLimit;
     // Genesis block
     if (pindexLast == NULL)
         return nProofOfWorkLimit;
@@ -2360,8 +2362,10 @@ void static AbcmintMiner(CWallet *pwallet)
     unsigned int nExtraNonce = 0;
 
     try { while(true) {
+        /*[singleRun]
         while (vNodes.empty())
             MilliSleep(1000);
+        */
 
         //
         // Create new block
@@ -2424,8 +2428,10 @@ void static AbcmintMiner(CWallet *pwallet)
 
             // Check for stop or if block needs to be rebuilt
             boost::this_thread::interruption_point();
+            /*[singleRun]
             if (vNodes.empty())
                 break;
+            */
             if (nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60)
                 break;
             if (pindexPrev != pindexBest)

@@ -1346,6 +1346,7 @@ void ThreadOpenConnections()
         boost::this_thread::interruption_point();
 
         // Add seed nodes if IRC isn't working
+        /*[singleRun]
         if (addrman.size()==0 && (GetTime() - nStart > 60) && !fTestNet)
         {
             static bool done = false;
@@ -1357,7 +1358,7 @@ void ThreadOpenConnections()
                 done = true;
             }
         }
-
+        */
         //
         // Choose an address to connect to based on most recently seen
         //

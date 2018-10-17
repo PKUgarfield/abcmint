@@ -1681,7 +1681,8 @@ public:
         if (nHeight < 3024) {
             nChainWorkCalculate = nBits;
         } else {
-            nBitsCalculate = nBits - 40;
+            //[singleRun]
+            nBitsCalculate = nBits - 35;
             if (nBitsCalculate > 63) {
                 throw;
             } else if (nBitsCalculate > 0) {
